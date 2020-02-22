@@ -1,0 +1,5 @@
+*.exe
+*.test
+*.sql
+
+sql2gorm
