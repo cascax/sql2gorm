@@ -107,9 +107,13 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 			goFieldName = goFieldName[len(columnPrefix):]
 		}
 
+		goType, pkg := mysqlToGoType(col.Tp.Tp)
 		field := tmplField{
 			Name:   strcase.ToCamel(goFieldName),
-			GoType: mysqlToGoType(col.Tp.Tp),
+			GoType: goType,
+		}
+		if pkg != "" {
+			importPath = append(importPath, pkg)
 		}
 
 		tags := make(map[string]string)
@@ -153,8 +157,8 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 			case ast.ColumnOptionFulltext:
 			case ast.ColumnOptionComment:
 				field.Comment = o.Expr.GetDatum().GetString()
-			//default:
-			//	return "", nil, errors.Errorf(" unsupport option %d\n", o.Tp)
+			default:
+				//return "", nil, errors.Errorf(" unsupport option %d\n", o.Tp)
 			}
 		}
 		if !isPrimaryKey && isNotNull {
@@ -179,25 +183,25 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 	return string(code), importPath, err
 }
 
-func mysqlToGoType(colTp byte) string {
+func mysqlToGoType(colTp byte) (string, string) {
 	switch colTp {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
-		return "int"
+		return "int", ""
 	case mysql.TypeLonglong:
-		return "int64"
+		return "int64", ""
 	case mysql.TypeFloat, mysql.TypeDouble:
-		return "float64"
+		return "float64", ""
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString,
 		mysql.TypeBlob:
-		return "string"
+		return "string", ""
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate:
-		return "time.Date"
+		return "time.Date", "time"
 	case mysql.TypeDecimal, mysql.TypeNewDecimal:
-		return "string"
+		return "string", ""
 	case mysql.TypeJSON:
-		return "string"
+		return "string", ""
 	default:
-		return "UnSupport"
+		return "UnSupport", ""
 	}
 }
 
