@@ -14,7 +14,7 @@ func TestParseSql(t *testing.T) {
   sex VARCHAR(2) NULL,
   comment TEXT
   ) ENGINE=InnoDB;`
-	data, err := ParseSql(sql, WithTablePrefix("t_"))
+	data, err := ParseSql(sql, WithTablePrefix("t_"), WithJsonTag())
 	assert.Nil(t, err)
 	for _, s := range data.StructCode {
 		t.Log(s)
@@ -22,7 +22,7 @@ func TestParseSql(t *testing.T) {
 	t.Log(data.ImportPath)
 }
 
-func TestParseSqlToWritee(t *testing.T) {
+func TestParseSqlToWrite(t *testing.T) {
 	sql := `CREATE TABLE IF NOT EXISTS t_person_info (
   age INT(11) unsigned NULL,
   id BIGINT(11) PRIMARY KEY AUTO_INCREMENT NOT NULL COMMENT '这是id',

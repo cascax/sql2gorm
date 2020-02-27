@@ -116,7 +116,7 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 			importPath = append(importPath, pkg)
 		}
 
-		tags := make(map[string]string)
+		tags := make([]string, 0, 4)
 		// 生成GORM tag和修正类型
 		gormTag := strings.Builder{}
 		gormTag.WriteString("column:")
@@ -164,10 +164,10 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		if !isPrimaryKey && isNotNull {
 			gormTag.WriteString(";NOT NULL")
 		}
-		tags["gorm"] = gormTag.String()
+		tags = append(tags, "gorm", gormTag.String())
 
 		if opt.JsonTag {
-			tags["json"] = colName
+			tags = append(tags, "json", colName)
 		}
 
 		field.Tag = makeTagStr(tags)
@@ -205,12 +205,12 @@ func mysqlToGoType(colTp byte) (string, string) {
 	}
 }
 
-func makeTagStr(tags map[string]string) string {
+func makeTagStr(tags []string) string {
 	builder := strings.Builder{}
-	for k, s := range tags {
-		builder.WriteString(k)
+	for i := 0; i < len(tags)/2; i++ {
+		builder.WriteString(tags[i*2])
 		builder.WriteString(`:"`)
-		builder.WriteString(s)
+		builder.WriteString(tags[i*2+1])
 		builder.WriteString(`" `)
 	}
 	if builder.Len() > 0 {
