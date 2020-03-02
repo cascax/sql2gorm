@@ -192,7 +192,7 @@ func mysqlToGoType(colTp byte) (string, string) {
 	case mysql.TypeFloat, mysql.TypeDouble:
 		return "float64", ""
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString,
-		mysql.TypeBlob:
+		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		return "string", ""
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate:
 		return "time.Date", "time"
