@@ -133,8 +133,10 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 			case ast.ColumnOptionAutoIncrement:
 				gormTag.WriteString(";AUTO_INCREMENT")
 			case ast.ColumnOptionDefaultValue:
-				gormTag.WriteString(";default:")
-				gormTag.WriteString(o.Expr.GetDatum().GetString())
+				if def := o.Expr.GetDatum().GetString(); def != "" {
+					gormTag.WriteString(";default:")
+					gormTag.WriteString(def)
+				}
 			case ast.ColumnOptionUniqKey:
 				gormTag.WriteString(";unique")
 			case ast.ColumnOptionNull:
