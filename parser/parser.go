@@ -1,12 +1,15 @@
 package parser
 
 import (
+	"fmt"
 	"github.com/iancoleman/strcase"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/ast"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/mysql"
+	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/types"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/parser"
 	"go/format"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"text/template"
@@ -52,6 +55,7 @@ func ParseSql(sql string, options ...Option) (ModelCodes, error) {
 	for s := range importPath {
 		importPathArr = append(importPathArr, s)
 	}
+	sort.Strings(importPathArr)
 	return ModelCodes{
 		Package:    opt.Package,
 		ImportPath: importPathArr,
@@ -99,6 +103,13 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 	}
 	data.TableName = strcase.ToCamel(data.TableName)
 
+	isPrimaryKey := make(map[string]bool)
+	for _, con := range stmt.Constraints {
+		if con.Tp == ast.ConstraintPrimaryKey {
+			isPrimaryKey[con.Keys[0].Column.String()] = true
+		}
+	}
+
 	columnPrefix := opt.ColumnPrefix
 	for _, col := range stmt.Cols {
 		colName := col.Name.Name.String()
@@ -107,54 +118,41 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 			goFieldName = goFieldName[len(columnPrefix):]
 		}
 
-		goType, pkg := mysqlToGoType(col.Tp.Tp)
 		field := tmplField{
 			Name:   strcase.ToCamel(goFieldName),
-			GoType: goType,
-		}
-		if pkg != "" {
-			importPath = append(importPath, pkg)
 		}
 
 		tags := make([]string, 0, 4)
-		// 生成GORM tag和修正类型
+		// make GORM's tag
 		gormTag := strings.Builder{}
 		gormTag.WriteString("column:")
 		gormTag.WriteString(colName)
-		isPrimaryKey := false
+		if isPrimaryKey[colName] {
+			gormTag.WriteString(";primary_key")
+		}
 		isNotNull := false
+		canNull := false
 		for _, o := range col.Options {
 			switch o.Tp {
 			case ast.ColumnOptionPrimaryKey:
-				gormTag.WriteString(";primary_key")
-				isPrimaryKey = true
+				if !isPrimaryKey[colName] {
+					gormTag.WriteString(";primary_key")
+					isPrimaryKey[colName] = true
+				}
 			case ast.ColumnOptionNotNull:
 				isNotNull = true
 			case ast.ColumnOptionAutoIncrement:
 				gormTag.WriteString(";AUTO_INCREMENT")
 			case ast.ColumnOptionDefaultValue:
-				if def := o.Expr.GetDatum().GetString(); def != "" {
+				if value := getDefaultValue(o.Expr); value != "" {
 					gormTag.WriteString(";default:")
-					gormTag.WriteString(def)
+					gormTag.WriteString(value)
 				}
 			case ast.ColumnOptionUniqKey:
 				gormTag.WriteString(";unique")
 			case ast.ColumnOptionNull:
 				//gormTag.WriteString(";NULL")
-				if !opt.NoNullType {
-					if opt.NullStyle == NullInPointer {
-						field.GoType = "*" + field.GoType
-					} else {
-						importPath = append(importPath, "database/sql")
-						if strings.Index(field.GoType, ".") < 0 {
-							if strings.Index(field.GoType, "int") >= 0 {
-								field.GoType = "sql.NullInt64"
-							} else {
-								field.GoType = "sql.Null" + strings.ToUpper(field.GoType[:1]) + field.GoType[1:]
-							}
-						}
-					}
-				}
+				canNull = true
 			case ast.ColumnOptionOnUpdate: // For Timestamp and Datetime only.
 			case ast.ColumnOptionFulltext:
 			case ast.ColumnOptionComment:
@@ -163,7 +161,7 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 				//return "", nil, errors.Errorf(" unsupport option %d\n", o.Tp)
 			}
 		}
-		if !isPrimaryKey && isNotNull {
+		if !isPrimaryKey[colName] && isNotNull {
 			gormTag.WriteString(";NOT NULL")
 		}
 		tags = append(tags, "gorm", gormTag.String())
@@ -173,6 +171,18 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		}
 
 		field.Tag = makeTagStr(tags)
+
+		// get type in golang
+		nullStyle := opt.NullStyle
+		if !canNull {
+			nullStyle = NullDisable
+		}
+		goType, pkg := mysqlToGoType(col.Tp.Tp, nullStyle)
+		if pkg != "" {
+			importPath = append(importPath, pkg)
+		}
+		field.GoType = goType
+
 		data.Fields = append(data.Fields, field)
 	}
 
@@ -185,26 +195,54 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 	return string(code), importPath, err
 }
 
-func mysqlToGoType(colTp byte) (string, string) {
-	switch colTp {
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
-		return "int", ""
-	case mysql.TypeLonglong:
-		return "int64", ""
-	case mysql.TypeFloat, mysql.TypeDouble:
-		return "float64", ""
-	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString,
-		mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
-		return "string", ""
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate:
-		return "time.Date", "time"
-	case mysql.TypeDecimal, mysql.TypeNewDecimal:
-		return "string", ""
-	case mysql.TypeJSON:
-		return "string", ""
-	default:
-		return "UnSupport", ""
+func mysqlToGoType(colTp byte, style NullStyle) (name string, path string) {
+	if style == NullInSql {
+		path = "database/sql"
+		switch colTp {
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
+			name = "sql.NullInt32"
+		case mysql.TypeLonglong:
+			name = "sql.NullInt64"
+		case mysql.TypeFloat, mysql.TypeDouble:
+			name = "sql.NullFloat64"
+		case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString,
+			mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
+			name = "sql.NullString"
+		case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate:
+			name = "sql.NullTime"
+		case mysql.TypeDecimal, mysql.TypeNewDecimal:
+			name = "sql.NullString"
+		case mysql.TypeJSON:
+			name = "sql.NullString"
+		default:
+			return "UnSupport", ""
+		}
+	} else {
+		switch colTp {
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
+			name = "int"
+		case mysql.TypeLonglong:
+			name = "int64"
+		case mysql.TypeFloat, mysql.TypeDouble:
+			name = "float64"
+		case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString,
+			mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
+			name = "string"
+		case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate:
+			path = "time"
+			name = "time.Time"
+		case mysql.TypeDecimal, mysql.TypeNewDecimal:
+			name = "string"
+		case mysql.TypeJSON:
+			name = "string"
+		default:
+			return "UnSupport", ""
+		}
+		if style == NullInPointer {
+			name = "*" + name
+		}
 	}
+	return
 }
 
 func makeTagStr(tags []string) string {
@@ -219,6 +257,19 @@ func makeTagStr(tags []string) string {
 		return builder.String()[:builder.Len()-1]
 	}
 	return builder.String()
+}
+
+func getDefaultValue(expr ast.ExprNode) (value string) {
+	if expr.GetDatum().Kind() != types.KindNull {
+		value = fmt.Sprintf("%v", expr.GetDatum().GetValue())
+	} else if expr.GetFlag() != ast.FlagConstant {
+		if expr.GetFlag() == ast.FlagHasFunc {
+			if funcExpr, ok := expr.(*ast.FuncCallExpr); ok {
+				value = funcExpr.FnName.O
+			}
+		}
+	}
+	return
 }
 
 func initTemplate() {

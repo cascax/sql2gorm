@@ -3,7 +3,8 @@ package parser
 type NullStyle int
 
 const (
-	NullInSql NullStyle = iota + 1
+	NullDisable NullStyle = iota
+	NullInSql
 	NullInPointer
 )
 
@@ -77,6 +78,9 @@ func parseOption(options []Option) options {
 	o := defaultOptions
 	for _, f := range options {
 		f(&o)
+	}
+	if o.NoNullType {
+		o.NullStyle = NullDisable
 	}
 	return o
 }
