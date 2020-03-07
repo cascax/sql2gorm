@@ -54,7 +54,7 @@ func TestParseSql(t *testing.T) {
   sex VARCHAR(2) NULL,
   num INT(11) DEFAULT 3 NULL,
   comment TEXT
-  );`
+  ) COMMENT="person info";`
 	data, err := ParseSql(sql, WithTablePrefix("t_"), WithJsonTag())
 	assert.Nil(t, err)
 	for _, s := range data.StructCode {

@@ -80,6 +80,7 @@ type tmplData struct {
 	NameFunc     bool
 	RawTableName string
 	Fields       []tmplField
+	Comment      string
 }
 
 type tmplField struct {
@@ -103,6 +104,14 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 	}
 	data.TableName = strcase.ToCamel(data.TableName)
 
+	// find table comment
+	for _, opt := range stmt.Options {
+		if opt.Tp == ast.TableOptionComment {
+			data.Comment = opt.StrValue
+			break
+		}
+	}
+
 	isPrimaryKey := make(map[string]bool)
 	for _, con := range stmt.Constraints {
 		if con.Tp == ast.ConstraintPrimaryKey {
@@ -119,7 +128,7 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		}
 
 		field := tmplField{
-			Name:   strcase.ToCamel(goFieldName),
+			Name: strcase.ToCamel(goFieldName),
 		}
 
 		tags := make([]string, 0, 4)
@@ -300,6 +309,7 @@ func initTemplate() {
 
 func init() {
 	structTmplRaw = `
+{{if .Comment}}// {{.Comment}}{{end}}
 type {{.TableName}} struct {
 {{- range .Fields}}
 	{{.Name}} {{.GoType}} {{if .Tag}}` + "`{{.Tag}}`" + `{{end}}{{if .Comment}} // {{.Comment}}{{end}}
