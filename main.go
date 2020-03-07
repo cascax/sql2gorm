@@ -18,6 +18,7 @@ type options struct {
 	NoNullType   bool
 	NullStyle    string
 	Package      string
+	GormType     bool
 
 	InputFile  string
 	OutputFile string
@@ -36,6 +37,7 @@ func parseFlag() options {
 	flag.StringVar(&args.NullStyle, "null-style", "",
 		"null type: sql.NullXXX(use 'sql') or *xxx(use 'ptr')")
 	flag.StringVar(&args.Package, "pkg", "", "package name, default: model")
+	flag.BoolVar(&args.GormType, "with-type", false, "write type in gorm tag")
 
 	flag.Parse()
 	return args
@@ -74,6 +76,9 @@ func getOptions(args options) []parser.Option {
 	}
 	if args.Package != "" {
 		opt = append(opt, parser.WithPackage(args.Package))
+	}
+	if args.GormType {
+		opt = append(opt, parser.WithGormType())
 	}
 	return opt
 }

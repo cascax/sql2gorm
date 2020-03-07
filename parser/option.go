@@ -19,6 +19,7 @@ type options struct {
 	NoNullType   bool
 	NullStyle    NullStyle
 	Package      string
+	GormType     bool
 }
 
 var defaultOptions = options{
@@ -71,6 +72,13 @@ func WithNullStyle(s NullStyle) Option {
 func WithPackage(pkg string) Option {
 	return func(o *options) {
 		o.Package = pkg
+	}
+}
+
+// WithGormType will write type in gorm tag
+func WithGormType() Option {
+	return func(o *options) {
+		o.GormType = true
 	}
 }
 

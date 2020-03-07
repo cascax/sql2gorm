@@ -127,6 +127,10 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		gormTag := strings.Builder{}
 		gormTag.WriteString("column:")
 		gormTag.WriteString(colName)
+		if opt.GormType {
+			gormTag.WriteString(";type:")
+			gormTag.WriteString(col.Tp.InfoSchemaStr())
+		}
 		if isPrimaryKey[colName] {
 			gormTag.WriteString(";primary_key")
 		}
@@ -177,7 +181,7 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		if !canNull {
 			nullStyle = NullDisable
 		}
-		goType, pkg := mysqlToGoType(col.Tp.Tp, nullStyle)
+		goType, pkg := mysqlToGoType(col.Tp, nullStyle)
 		if pkg != "" {
 			importPath = append(importPath, pkg)
 		}
@@ -195,10 +199,10 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 	return string(code), importPath, err
 }
 
-func mysqlToGoType(colTp byte, style NullStyle) (name string, path string) {
+func mysqlToGoType(colTp *types.FieldType, style NullStyle) (name string, path string) {
 	if style == NullInSql {
 		path = "database/sql"
-		switch colTp {
+		switch colTp.Tp {
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
 			name = "sql.NullInt32"
 		case mysql.TypeLonglong:
@@ -218,11 +222,19 @@ func mysqlToGoType(colTp byte, style NullStyle) (name string, path string) {
 			return "UnSupport", ""
 		}
 	} else {
-		switch colTp {
+		switch colTp.Tp {
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong:
-			name = "int"
+			if mysql.HasUnsignedFlag(colTp.Flag) {
+				name = "uint"
+			} else {
+				name = "int"
+			}
 		case mysql.TypeLonglong:
-			name = "int64"
+			if mysql.HasUnsignedFlag(colTp.Flag) {
+				name = "uint64"
+			} else {
+				name = "int64"
+			}
 		case mysql.TypeFloat, mysql.TypeDouble:
 			name = "float64"
 		case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString,
