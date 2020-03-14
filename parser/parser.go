@@ -7,6 +7,7 @@ import (
 	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/mysql"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/types"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/parser"
+	"github.com/pkg/errors"
 	"go/format"
 	"io"
 	"sort"
@@ -205,7 +206,10 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		return "", nil, err
 	}
 	code, err := format.Source([]byte(builder.String()))
-	return string(code), importPath, err
+	if err != nil {
+		return string(code), importPath, errors.WithMessage(err, "format golang code error")
+	}
+	return string(code), importPath, nil
 }
 
 func mysqlToGoType(colTp *types.FieldType, style NullStyle) (name string, path string) {
@@ -309,7 +313,9 @@ func initTemplate() {
 
 func init() {
 	structTmplRaw = `
-{{if .Comment}}// {{.Comment}}{{end}}
+{{- if .Comment -}}
+// {{.Comment}}
+{{end -}}
 type {{.TableName}} struct {
 {{- range .Fields}}
 	{{.Name}} {{.GoType}} {{if .Tag}}` + "`{{.Tag}}`" + `{{end}}{{if .Comment}} // {{.Comment}}{{end}}
