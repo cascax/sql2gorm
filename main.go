@@ -23,13 +23,24 @@ type options struct {
 	InputFile  string
 	OutputFile string
 	Sql        string
+
+	MysqlDsn   string
+	MysqlTable string
+}
+
+func exitWithInfo(format string, a ...interface{}) {
+	_, _ = fmt.Fprintf(os.Stderr, format+"\n", a...)
+	os.Exit(1)
 }
 
 func parseFlag() options {
 	args := options{}
+	//flagSet := flag.NewFlagSet("optional", flag.ExitOnError)
+
 	flag.StringVar(&args.InputFile, "f", "", "input file")
 	flag.StringVar(&args.OutputFile, "o", "", "output file")
 	flag.StringVar(&args.Sql, "sql", "", "input SQL")
+
 	flag.BoolVar(&args.JsonTag, "json", false, "generate json tag")
 	flag.StringVar(&args.TablePrefix, "table-prefix", "", "table name prefix")
 	flag.StringVar(&args.ColumnPrefix, "col-prefix", "", "column name prefix")
@@ -38,6 +49,9 @@ func parseFlag() options {
 		"null type: sql.NullXXX(use 'sql') or *xxx(use 'ptr')")
 	flag.StringVar(&args.Package, "pkg", "", "package name, default: model")
 	flag.BoolVar(&args.GormType, "with-type", false, "write type in gorm tag")
+
+	flag.StringVar(&args.MysqlDsn, "db-dsn", "", "mysql dsn([user]:[pass]@/[database][?charset=xxx&...])")
+	flag.StringVar(&args.MysqlTable, "db-table", "", "mysql table name")
 
 	flag.Parse()
 	return args
@@ -90,8 +104,7 @@ func main() {
 	if args.OutputFile != "" {
 		f, err := os.OpenFile(args.OutputFile, os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
-			fmt.Printf("open %s failed, %s\n", args.OutputFile, err)
-			return
+			exitWithInfo("open %s failed, %s\n", args.OutputFile, err)
 		}
 		defer f.Close()
 		output = f
@@ -103,13 +116,22 @@ func main() {
 		if args.InputFile != "" {
 			b, err := ioutil.ReadFile(args.InputFile)
 			if err != nil {
-				fmt.Printf("read %s failed, %s\n", args.InputFile, err)
-				return
+				exitWithInfo("read %s failed, %s\n", args.InputFile, err)
 			}
 			sql = string(b)
+		} else if args.MysqlDsn != "" {
+			if args.MysqlTable == "" {
+				exitWithInfo("miss mysql table")
+			}
+			var err error
+			sql, err = parser.GetCreateTableFromDB(args.MysqlDsn, args.MysqlTable)
+			if err != nil {
+				exitWithInfo("get create table error: %s", err)
+			}
 		} else {
-			fmt.Println("no SQL input")
-			return
+			_, _ = fmt.Fprintf(os.Stderr, "no SQL input(-sql|-f|-db-dsn)\n\n")
+			flag.Usage()
+			os.Exit(2)
 		}
 	}
 
@@ -120,6 +142,6 @@ func main() {
 
 	err := parser.ParseSqlToWrite(sql, output, opt...)
 	if err != nil {
-		fmt.Println(err)
+		exitWithInfo(err.Error())
 	}
 }
