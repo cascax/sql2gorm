@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"github.com/iancoleman/strcase"
+	"github.com/jinzhu/inflection"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/ast"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/mysql"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/types"
@@ -103,6 +104,10 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		data.NameFunc = true
 		data.TableName = data.TableName[len(tablePrefix):]
 	}
+	if opt.ForceTableName || data.RawTableName != inflection.Plural(data.RawTableName) {
+		data.NameFunc = true
+	}
+
 	data.TableName = strcase.ToCamel(data.TableName)
 
 	// find table comment

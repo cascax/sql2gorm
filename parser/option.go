@@ -11,15 +11,16 @@ const (
 type Option func(*options)
 
 type options struct {
-	Charset      string
-	Collation    string
-	JsonTag      bool
-	TablePrefix  string
-	ColumnPrefix string
-	NoNullType   bool
-	NullStyle    NullStyle
-	Package      string
-	GormType     bool
+	Charset        string
+	Collation      string
+	JsonTag        bool
+	TablePrefix    string
+	ColumnPrefix   string
+	NoNullType     bool
+	NullStyle      NullStyle
+	Package        string
+	GormType       bool
+	ForceTableName bool
 }
 
 var defaultOptions = options{
@@ -79,6 +80,12 @@ func WithPackage(pkg string) Option {
 func WithGormType() Option {
 	return func(o *options) {
 		o.GormType = true
+	}
+}
+
+func WithForceTableName() Option {
+	return func(o *options) {
+		o.ForceTableName = true
 	}
 }
 

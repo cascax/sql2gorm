@@ -10,15 +10,16 @@ import (
 )
 
 type options struct {
-	Charset      string
-	Collation    string
-	JsonTag      bool
-	TablePrefix  string
-	ColumnPrefix string
-	NoNullType   bool
-	NullStyle    string
-	Package      string
-	GormType     bool
+	Charset        string
+	Collation      string
+	JsonTag        bool
+	TablePrefix    string
+	ColumnPrefix   string
+	NoNullType     bool
+	NullStyle      string
+	Package        string
+	GormType       bool
+	ForceTableName bool
 
 	InputFile  string
 	OutputFile string
@@ -49,6 +50,7 @@ func parseFlag() options {
 		"null type: sql.NullXXX(use 'sql') or *xxx(use 'ptr')")
 	flag.StringVar(&args.Package, "pkg", "", "package name, default: model")
 	flag.BoolVar(&args.GormType, "with-type", false, "write type in gorm tag")
+	flag.BoolVar(&args.ForceTableName, "with-tablename", false, "write TableName func force")
 
 	flag.StringVar(&args.MysqlDsn, "db-dsn", "", "mysql dsn([user]:[pass]@/[database][?charset=xxx&...])")
 	flag.StringVar(&args.MysqlTable, "db-table", "", "mysql table name")
@@ -93,6 +95,9 @@ func getOptions(args options) []parser.Option {
 	}
 	if args.GormType {
 		opt = append(opt, parser.WithGormType())
+	}
+	if args.ForceTableName {
+		opt = append(opt, parser.WithForceTableName())
 	}
 	return opt
 }
