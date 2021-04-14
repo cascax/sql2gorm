@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
@@ -8,39 +9,43 @@ import (
 
 var testData = [][]string{
 	{
-		"CREATE TABLE info (age INT(11) NULL);",
+		"CREATE TABLE information (age INT(11) NULL);",
 		"Age int `gorm:\"column:age\"`", "",
 	},
 	{
-		"CREATE TABLE info (age BIGINT(11) NULL COMMENT 'is age');",
+		"CREATE TABLE information (age BIGINT(11) NULL COMMENT 'is age');",
 		"Age int64 `gorm:\"column:age\"` // is age", "",
 	},
 	{
-		"CREATE TABLE info (id BIGINT(11) PRIMARY KEY AUTO_INCREMENT);",
-		"Id int64 `gorm:\"column:id;primary_key;AUTO_INCREMENT\"`", "",
+		"CREATE TABLE information (id BIGINT(11) PRIMARY KEY AUTO_INCREMENT);",
+		"ID int64 `gorm:\"column:id;primary_key;AUTO_INCREMENT\"`", "",
 	},
 	{
-		"CREATE TABLE info (created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP);",
+		"CREATE TABLE information (user_ip varchar(20));",
+		"UserIP string `gorm:\"column:user_ip\"`", "",
+	},
+	{
+		"CREATE TABLE information (created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP);",
 		"CreatedAt time.Time `gorm:\"column:created_at;default:CURRENT_TIMESTAMP;NOT NULL\"`", "time",
 	},
 	{
-		"CREATE TABLE info (num INT(11) DEFAULT 3 NULL);",
+		"CREATE TABLE information (num INT(11) DEFAULT 3 NULL);",
 		"Num int `gorm:\"column:num;default:3\"`", "",
 	},
 	{
-		"CREATE TABLE info (num double(5,6) DEFAULT 31.50 NULL);",
+		"CREATE TABLE information (num double(5,6) DEFAULT 31.50 NULL);",
 		"Num float64 `gorm:\"column:num;default:31.50\"`", "",
 	},
 	{
-		"CREATE TABLE info (comment TEXT);",
+		"CREATE TABLE information (comment TEXT);",
 		"Comment string `gorm:\"column:comment\"`", "",
 	},
 	{
-		"CREATE TABLE info (comment TINYTEXT);",
+		"CREATE TABLE information (comment TINYTEXT);",
 		"Comment string `gorm:\"column:comment\"`", "",
 	},
 	{
-		"CREATE TABLE info (comment LONGTEXT);",
+		"CREATE TABLE information (comment LONGTEXT);",
 		"Comment string `gorm:\"column:comment\"`", "",
 	},
 }
@@ -79,9 +84,10 @@ func TestParseSqlToWrite(t *testing.T) {
 }
 
 func TestParseSql1(t *testing.T) {
-	for _, test := range testData {
+	for i, test := range testData {
+		msg := fmt.Sprintf("data-%d", i)
 		data, err := ParseSql(test[0], WithNoNullType())
-		if !assert.Nil(t, err) {
+		if !assert.NoError(t, err, msg) {
 			continue
 		}
 		//t.Log(data.StructCode)

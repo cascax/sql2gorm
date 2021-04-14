@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"github.com/iancoleman/strcase"
 	"github.com/jinzhu/inflection"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/ast"
 	"github.com/knocknote/vitess-sqlparser/tidbparser/dependency/mysql"
@@ -24,6 +23,12 @@ var (
 	fileTmpl      *template.Template
 	tmplParseOnce sync.Once
 )
+
+var acronym = map[string]struct{}{
+	"ID":  {},
+	"IP":  {},
+	"RPC": {},
+}
 
 type ModelCodes struct {
 	Package    string
@@ -77,6 +82,13 @@ func ParseSqlToWrite(sql string, writer io.Writer, options ...Option) error {
 	return nil
 }
 
+func ConfigureAcronym(words []string) {
+	acronym = make(map[string]struct{}, len(words))
+	for _, w := range words {
+		acronym[strings.ToUpper(w)] = struct{}{}
+	}
+}
+
 type tmplData struct {
 	TableName    string
 	NameFunc     bool
@@ -108,7 +120,7 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		data.NameFunc = true
 	}
 
-	data.TableName = strcase.ToCamel(data.TableName)
+	data.TableName = toCamel(data.TableName)
 
 	// find table comment
 	for _, opt := range stmt.Options {
@@ -134,7 +146,7 @@ func makeCode(stmt *ast.CreateTableStmt, opt options) (string, []string, error) 
 		}
 
 		field := tmplField{
-			Name: strcase.ToCamel(goFieldName),
+			Name: toCamel(goFieldName),
 		}
 
 		tags := make([]string, 0, 4)
@@ -300,6 +312,49 @@ func getDefaultValue(expr ast.ExprNode) (value string) {
 		}
 	}
 	return
+}
+
+func toCamel(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	s += "."
+
+	n := strings.Builder{}
+	n.Grow(len(s))
+	temp := strings.Builder{}
+	temp.Grow(len(s))
+	wordFirst := true
+	for _, v := range []byte(s) {
+		vIsCap := v >= 'A' && v <= 'Z'
+		vIsLow := v >= 'a' && v <= 'z'
+		if wordFirst && vIsLow {
+			v -= 'a' - 'A'
+		}
+
+		if vIsCap || vIsLow {
+			temp.WriteByte(v)
+			wordFirst = false
+		} else {
+			isNum := v >= '0' && v <= '9'
+			wordFirst = isNum || v == '_' || v == ' ' || v == '-' || v == '.'
+			if temp.Len() > 0 && wordFirst {
+				word := temp.String()
+				upper := strings.ToUpper(word)
+				if _, ok := acronym[upper]; ok {
+					n.WriteString(upper)
+				} else {
+					n.WriteString(word)
+				}
+				temp.Reset()
+			}
+			if isNum {
+				n.WriteByte(v)
+			}
+		}
+	}
+	return n.String()
 }
 
 func initTemplate() {
